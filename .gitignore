@@ -1,0 +1,15 @@
+# Log files
+*.log
+.whisper-autopaste/whisper_auto_paste.log
+
+# Python virtual environment
+.whisper-autopaste/venv/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE-specific files
+.idea/
+.vscode/
+*.swp

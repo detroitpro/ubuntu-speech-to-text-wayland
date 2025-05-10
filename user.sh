@@ -5,6 +5,7 @@ INSTALL_DIR="$HOME/.whisper-autopaste"
 VENV_PATH="$INSTALL_DIR/venv"
 SERVICE_NAME="whisper-autopaste.service"
 SCRIPT_PATH="$INSTALL_DIR/whisper_auto_paste.py"
+LOG_FILE="$INSTALL_DIR/whisper_auto_paste.log"
 
 echo "==> Creating Python virtual environment..."
 mkdir -p "$INSTALL_DIR"
@@ -25,9 +26,15 @@ import subprocess
 from pynput import keyboard
 from scipy.io.wavfile import write
 import threading
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 samplerate = 16000
-model = whisper.load_model("base")
+model_name = os.getenv("WHISPER_MODEL", "base")
+logging.info(f"Loading Whisper model: {model_name}")
+model = whisper.load_model(model_name)
 recording = []
 is_recording = False
 
@@ -35,10 +42,12 @@ def start_recording():
     global recording, is_recording
     is_recording = True
     recording = []
+    logging.debug('Recording started')
 
     def callback(indata, frames, time, status):
         if is_recording:
             recording.append(indata.copy())
+            logging.debug(f'Recorded {frames} frames')
 
     with sd.InputStream(samplerate=samplerate, channels=1, dtype='int16', callback=callback):
         while is_recording:
@@ -47,30 +56,41 @@ def start_recording():
 def stop_and_transcribe():
     global recording, is_recording
     is_recording = False
+    logging.debug('Recording stopped')
     if not recording:
+        logging.debug('No audio data recorded')
         return
 
     audio_data = np.concatenate(recording, axis=0)
+    logging.debug(f'Audio data length: {len(audio_data)}')
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         write(f.name, samplerate, audio_data)
         audio_path = f.name
+        logging.debug(f'Audio file created at {audio_path}')
 
     result = model.transcribe(audio_path)
     text = result["text"].strip()
-    os.remove(audio_path)
+    logging.debug(f'Transcription result: {text}')
+    # os.remove(audio_path) # Commented out to inspect the audio file
+    logging.info(f"Retained audio file at: {audio_path}")
 
     print("Transcribed:", text)
-    subprocess.run(f"echo '{text}' | wl-copy", shell=True)
-    subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])  # Ctrl+V
+    if text:
+        subprocess.run(f"echo '{text}' | wl-copy", shell=True)
+        subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])  # Ctrl+V
+    else:
+        logging.info("No text transcribed, skipping copy-paste.")
 
 def on_press(key):
     if key == keyboard.Key.ctrl_r and not is_recording:
+        logging.debug('Right Ctrl key pressed, starting recording')
         print("Recording...")
         threading.Thread(target=start_recording, daemon=True).start()
 
 def on_release(key):
     if key == keyboard.Key.ctrl_r and is_recording:
+        logging.debug('Right Ctrl key released, stopping recording and starting transcription')
         print("Transcribing...")
         stop_and_transcribe()
 
@@ -79,6 +99,11 @@ with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
 EOF
 
 chmod +x "$SCRIPT_PATH"
+
+echo "==> Ensuring log directory and file exist with correct permissions..."
+mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"
+chmod 664 "$LOG_FILE"
 
 echo "==> Creating systemd user service for whisper..."
 mkdir -p "$HOME/.config/systemd/user"
@@ -89,10 +114,13 @@ After=graphical.target
 
 [Service]
 ExecStart=$VENV_PATH/bin/python $SCRIPT_PATH
+StandardOutput=append:$LOG_FILE
+StandardError=append:$LOG_FILE
 Restart=always
-Environment=PATH=/usr/bin:/usr/local/bin
+Environment=PATH=/usr/bin:/usr/local/bin:/sbin:/usr/sbin
 Environment=DISPLAY=:0
 Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=WHISPER_MODEL=small
 
 [Install]
 WantedBy=default.target
