@@ -1,7 +1,6 @@
 # Whisper Auto Paste Setup
 
-This project sets up a system where holding **Right Ctrl** records your speech,
-then automatically transcribes it using Whisper and pastes it into the focused text field.
+This project sets up a system on **Ubuntu with Wayland** where holding **Right Ctrl** records your speech, then automatically transcribes it using OpenAI\'s Whisper model and pastes the text into the currently focused application.
 
 ---
 
