@@ -3,7 +3,7 @@ set -e
 
 echo "==> Installing system-wide dependencies..."
 sudo apt update
-sudo apt install -y ffmpeg wl-clipboard python3-venv python3-pyaudio python3-tk libevdev-dev libudev-dev libinput-dev cmake g++ git 
+sudo apt install -y ffmpeg wl-clipboard python3-venv python3-pyaudio python3-tk libevdev-dev libudev-dev libinput-dev cmake g++ git scdoc
 
 echo "==> Cloning and building ydotool..."
 rm -rf ~/ydotool
