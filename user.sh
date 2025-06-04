@@ -37,31 +37,47 @@ logging.info(f"Loading Whisper model: {model_name}")
 model = whisper.load_model(model_name)
 recording = []
 is_recording = False
+recording_lock = threading.Lock()
 
 def start_recording():
     global recording, is_recording
-    is_recording = True
-    recording = []
-    logging.debug('Recording started')
+    with recording_lock:
+        if is_recording:
+            logging.warning('Recording already in progress, ignoring start request.')
+            return
+        is_recording = True
+        recording = []
+        logging.debug('Recording started')
 
     def callback(indata, frames, time, status):
-        if is_recording:
-            recording.append(indata.copy())
-            logging.debug(f'Recorded {frames} frames')
+        with recording_lock:
+            if is_recording:
+                recording.append(indata.copy())
+                logging.debug(f'Recorded {frames} frames')
 
     with sd.InputStream(samplerate=samplerate, channels=1, dtype='int16', callback=callback):
-        while is_recording:
+        while True:
+            with recording_lock:
+                if not is_recording:
+                    break
             sd.sleep(100)
 
 def stop_and_transcribe():
     global recording, is_recording
-    is_recording = False
-    logging.debug('Recording stopped')
-    if not recording:
+    with recording_lock:
+        if not is_recording:
+            logging.warning('No recording in progress, ignoring stop request.')
+            return
+        is_recording = False
+        logging.debug('Recording stopped')
+        local_recording = recording.copy()
+        recording = []  # Clear buffer immediately
+
+    if not local_recording:
         logging.debug('No audio data recorded')
         return
 
-    audio_data = np.concatenate(recording, axis=0)
+    audio_data = np.concatenate(local_recording, axis=0)
     logging.debug(f'Audio data length: {len(audio_data)}')
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:

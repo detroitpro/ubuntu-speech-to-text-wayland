@@ -20,3 +20,4 @@ sudo usermod -aG input "$USER"
 sudo udevadm control --reload-rules
 
 echo "✅ Root-level setup complete. Please log out and log back in before running user.sh."
+Thank you.
