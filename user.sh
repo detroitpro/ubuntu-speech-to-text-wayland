@@ -27,6 +27,7 @@ from pynput import keyboard
 from scipy.io.wavfile import write
 import threading
 import logging
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -93,22 +94,33 @@ def stop_and_transcribe():
 
     print("Transcribed:", text)
     if text:
+        # Clear clipboard first, then set new text
+        subprocess.run("wl-copy --clear", shell=True)
+        time.sleep(0.1)  # Small delay to ensure clipboard is cleared
         subprocess.run(f"echo '{text}' | wl-copy", shell=True)
+        time.sleep(0.2)  # Delay to ensure clipboard is set before pasting
+        logging.debug(f'Text copied to clipboard: {text}')
         subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"])  # Ctrl+V
+        logging.debug('Paste command sent')
     else:
         logging.info("No text transcribed, skipping copy-paste.")
 
 def on_press(key):
-    if key == keyboard.Key.ctrl_r and not is_recording:
-        logging.debug('Right Ctrl key pressed, starting recording')
-        print("Recording...")
-        threading.Thread(target=start_recording, daemon=True).start()
+    if key == keyboard.Key.ctrl_r:
+        with recording_lock:
+            if not is_recording:
+                logging.debug('Right Ctrl key pressed, starting recording')
+                print("Recording...")
+                threading.Thread(target=start_recording, daemon=True).start()
 
 def on_release(key):
-    if key == keyboard.Key.ctrl_r and is_recording:
-        logging.debug('Right Ctrl key released, stopping recording and starting transcription')
-        print("Transcribing...")
-        stop_and_transcribe()
+    if key == keyboard.Key.ctrl_r:
+        with recording_lock:
+            if is_recording:
+                logging.debug('Right Ctrl key released, stopping recording and starting transcription')
+                print("Transcribing...")
+        # Run transcription in separate thread to avoid blocking the key listener
+        threading.Thread(target=stop_and_transcribe, daemon=True).start()
 
 with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
     listener.join()
